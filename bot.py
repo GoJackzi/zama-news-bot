@@ -235,26 +235,19 @@ class ZamaNewsBot:
                         new_changelog += 1
                         await asyncio.sleep(2)
             
-            # Check litepaper (with change detection)
-            litepaper_entries = self.docs_monitor.get_litepaper_updates()
+            # Check litepaper (with detailed change detection)
+            previous_sections = self.storage.get_last_litepaper_sections()
+            litepaper_entries = self.docs_monitor.get_litepaper_updates(previous_content=previous_sections)
             new_litepaper = 0
             
             for entry in litepaper_entries:
                 entry_id = entry['id']
                 if not self.storage.is_posted('litepaper', entry_id):
-                    # Get previous version for comparison
-                    previous_hash = self.storage.get_last_litepaper_hash()
-                    current_hash = entry.get('hash', '')
-                    
-                    # Add change info to entry
-                    if previous_hash and previous_hash != current_hash:
-                        entry['has_changes'] = True
-                        entry['previous_hash'] = previous_hash
-                    
                     message = format_litepaper(entry)
                     if await self.send_message(message):
                         self.storage.mark_posted('litepaper', entry_id)
-                        self.storage.save_litepaper_hash(current_hash)
+                        self.storage.save_litepaper_hash(entry.get('hash', ''))
+                        self.storage.save_litepaper_sections(entry.get('sections', {}))
                         new_litepaper += 1
                         await asyncio.sleep(2)
             

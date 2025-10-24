@@ -35,7 +35,8 @@ class Storage:
             'github': [],
             'twitter': [],
             'last_updated': None,
-            'litepaper_hash': None
+            'litepaper_hash': None,
+            'litepaper_sections': None
         }
     
     def _save(self):
@@ -78,9 +79,20 @@ class Storage:
         """Get the hash of the last litepaper version"""
         return self.data.get('litepaper_hash', None)
     
+    def get_last_litepaper_sections(self) -> str:
+        """Get the sections from the last litepaper version"""
+        return self.data.get('litepaper_sections', None)
+    
     def save_litepaper_hash(self, hash_value: str):
         """Save the current litepaper hash"""
         self.data['litepaper_hash'] = hash_value
         self._save()
         logger.info(f"Saved litepaper hash: {hash_value[:16]}...")
+    
+    def save_litepaper_sections(self, sections: dict):
+        """Save the current litepaper sections for diff detection"""
+        import json
+        self.data['litepaper_sections'] = json.dumps(sections)
+        self._save()
+        logger.info(f"Saved litepaper sections: {len(sections)} sections")
 

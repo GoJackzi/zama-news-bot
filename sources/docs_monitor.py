@@ -30,7 +30,7 @@ class DocsMonitor:
     
     def get_changelog_updates(self) -> List[Dict[str, Any]]:
         """
-        Check for changelog updates
+        Check for changelog updates with better parsing
         
         Returns:
             List of changelog entries
@@ -42,28 +42,57 @@ class DocsMonitor:
             soup = BeautifulSoup(response.content, 'html.parser')
             entries = []
             
-            # Look for changelog entries (adjust selectors based on actual HTML structure)
-            # Common patterns: h2, h3 with dates, or article elements
-            changelog_items = soup.find_all(['h2', 'h3', 'article'], limit=10)
+            # Look for changelog sections - typically h2 headings with date/version
+            sections = soup.find_all(['h2', 'h3', 'section', 'article'])
             
-            for item in changelog_items:
-                # Try to extract version/date and content
-                text = item.get_text(strip=True)
+            for section in sections:
+                # Extract heading text
+                heading = section.get_text(strip=True)
                 
-                # Skip if too short or just navigation elements
-                if len(text) < 10 or 'Table of Contents' in text or 'Navigation' in text:
+                # Skip navigation, TOC, etc.
+                skip_keywords = ['Table of Contents', 'Navigation', 'Search', 'Menu', 'Sidebar']
+                if any(keyword in heading for keyword in skip_keywords) or len(heading) < 5:
                     continue
                 
-                # Create unique ID from content hash
-                content_hash = hashlib.md5(text.encode()).hexdigest()
+                # Try to find associated content
+                content_parts = []
+                
+                # Get next siblings until next heading
+                next_elem = section.find_next_sibling()
+                while next_elem and next_elem.name not in ['h1', 'h2', 'h3']:
+                    if next_elem.name in ['p', 'ul', 'ol', 'div']:
+                        text = next_elem.get_text(strip=True)
+                        if text:
+                            content_parts.append(text)
+                    next_elem = next_elem.find_next_sibling()
+                    if len(content_parts) >= 3:  # Limit to first 3 paragraphs
+                        break
+                
+                full_content = '\n'.join(content_parts)
+                
+                # Extract date if present in heading
+                import re
+                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', heading)
+                date_str = date_match.group(1) if date_match else datetime.now().strftime('%Y-%m-%d')
+                
+                # Create better title
+                title = heading
+                # If heading is just a date, try to get more context
+                if re.match(r'^\d{4}-\d{2}-\d{2}$', heading.strip()):
+                    if content_parts:
+                        first_line = content_parts[0].split('\n')[0]
+                        title = f"{heading}: {first_line[:60]}"
+                
+                # Create unique ID from title + date
+                content_hash = hashlib.md5(f"{title}{date_str}".encode()).hexdigest()
                 
                 entry = {
                     'id': f"changelog:{content_hash}",
-                    'title': text[:100] + ('...' if len(text) > 100 else ''),
-                    'content': text[:500],
+                    'title': title[:150],
+                    'content': full_content[:600] if full_content else heading,
                     'url': self.changelog_url,
-                    'date': datetime.now().strftime('%Y-%m-%d'),
-                    'date_obj': datetime.now(),
+                    'date': date_str,
+                    'date_obj': self._parse_changelog_date(date_str),
                     'type': 'changelog'
                 }
                 entries.append(entry)
@@ -75,10 +104,20 @@ class DocsMonitor:
             logger.error(f"Error fetching changelog: {e}")
             return []
     
-    def get_litepaper_updates(self) -> List[Dict[str, Any]]:
+    def _parse_changelog_date(self, date_str: str) -> datetime:
+        """Parse changelog date string"""
+        try:
+            return datetime.strptime(date_str, '%Y-%m-%d')
+        except:
+            return datetime.now()
+    
+    def get_litepaper_updates(self, previous_content: str = None) -> List[Dict[str, Any]]:
         """
-        Check for litepaper changes by monitoring page hash
+        Check for litepaper changes with detailed diff detection
         
+        Args:
+            previous_content: Previously stored litepaper content for comparison
+            
         Returns:
             List with litepaper update if changed
         """
@@ -93,13 +132,31 @@ class DocsMonitor:
             if not main_content:
                 return []
             
-            # Get text content and create hash
+            # Extract sections for detailed comparison
+            sections = {}
+            for heading in main_content.find_all(['h1', 'h2', 'h3']):
+                heading_text = heading.get_text(strip=True)
+                # Get content until next heading
+                content_parts = []
+                next_elem = heading.find_next_sibling()
+                while next_elem and next_elem.name not in ['h1', 'h2', 'h3']:
+                    if next_elem.name in ['p', 'ul', 'ol', 'div']:
+                        text = next_elem.get_text(strip=True)
+                        if text:
+                            content_parts.append(text)
+                    next_elem = next_elem.find_next_sibling()
+                sections[heading_text] = ' '.join(content_parts)
+            
+            # Get full text and create hash
             content = main_content.get_text(strip=True)
             content_hash = hashlib.md5(content.encode()).hexdigest()
             
             # Extract title
             title_elem = soup.find('h1')
             title = title_elem.get_text(strip=True) if title_elem else "Zama Protocol Litepaper"
+            
+            # Detect changes if previous content provided
+            changes = self._detect_litepaper_changes(sections, previous_content)
             
             entry = {
                 'id': f"litepaper:{content_hash}",
@@ -109,7 +166,9 @@ class DocsMonitor:
                 'date': datetime.now().strftime('%Y-%m-%d'),
                 'date_obj': datetime.now(),
                 'type': 'litepaper',
-                'hash': content_hash
+                'hash': content_hash,
+                'sections': sections,
+                'changes': changes
             }
             
             logger.info("Checked litepaper for updates")
@@ -118,4 +177,48 @@ class DocsMonitor:
         except Exception as e:
             logger.error(f"Error fetching litepaper: {e}")
             return []
+    
+    def _detect_litepaper_changes(self, current_sections: dict, previous_content: str) -> dict:
+        """Detect what changed in the litepaper"""
+        changes = {
+            'added_sections': [],
+            'removed_sections': [],
+            'modified_sections': [],
+            'has_changes': False
+        }
+        
+        if not previous_content:
+            return changes
+        
+        try:
+            import json
+            previous_sections = json.loads(previous_content)
+            
+            # Find added sections
+            for section in current_sections:
+                if section not in previous_sections:
+                    changes['added_sections'].append(section)
+            
+            # Find removed sections
+            for section in previous_sections:
+                if section not in current_sections:
+                    changes['removed_sections'].append(section)
+            
+            # Find modified sections
+            for section in current_sections:
+                if section in previous_sections:
+                    if current_sections[section] != previous_sections[section]:
+                        changes['modified_sections'].append(section)
+            
+            changes['has_changes'] = bool(
+                changes['added_sections'] or 
+                changes['removed_sections'] or 
+                changes['modified_sections']
+            )
+            
+        except:
+            # If comparison fails, just mark as changed
+            changes['has_changes'] = True
+        
+        return changes
 

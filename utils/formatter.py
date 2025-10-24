@@ -131,21 +131,50 @@ def format_litepaper(entry: Dict[str, Any]) -> str:
     title = escape_html(entry.get('title', 'Litepaper Update'))
     url = entry.get('url', '')
     date = entry.get('date', '')
-    has_changes = entry.get('has_changes', False)
+    changes = entry.get('changes', {})
+    has_changes = changes.get('has_changes', False)
     
     message = f"📄 <b>Litepaper Updated</b>\n\n"
     message += f"<b>{title}</b>\n\n"
     
     if has_changes:
-        message += f"✏️ The Zama Protocol Litepaper has been modified.\n"
-        message += f"Previous version detected - content has changed.\n\n"
+        message += f"✏️ <b>What Changed:</b>\n"
+        
+        # Added sections
+        added = changes.get('added_sections', [])
+        if added:
+            message += f"\n📗 <b>Added ({len(added)}):</b>\n"
+            for section in added[:3]:  # Show first 3
+                message += f"  • {escape_html(section[:50])}\n"
+            if len(added) > 3:
+                message += f"  • ...and {len(added) - 3} more\n"
+        
+        # Modified sections
+        modified = changes.get('modified_sections', [])
+        if modified:
+            message += f"\n📝 <b>Modified ({len(modified)}):</b>\n"
+            for section in modified[:3]:  # Show first 3
+                message += f"  • {escape_html(section[:50])}\n"
+            if len(modified) > 3:
+                message += f"  • ...and {len(modified) - 3} more\n"
+        
+        # Removed sections
+        removed = changes.get('removed_sections', [])
+        if removed:
+            message += f"\n📕 <b>Removed ({len(removed)}):</b>\n"
+            for section in removed[:3]:  # Show first 3
+                message += f"  • {escape_html(section[:50])}\n"
+            if len(removed) > 3:
+                message += f"  • ...and {len(removed) - 3} more\n"
+        
+        message += f"\n"
     else:
-        message += f"📝 New version of the Zama Protocol Litepaper is available.\n\n"
+        message += f"📝 New version of the Zama Protocol Litepaper.\n\n"
     
     if date:
         message += f"📅 {date}\n"
     
-    message += f"🔗 <a href='{url}'>Read Litepaper</a>"
+    message += f"🔗 <a href='{url}'>Read Full Litepaper</a>"
     
     return message
 
