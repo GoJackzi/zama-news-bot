@@ -77,6 +77,36 @@ class ZamaNewsBot:
         
         logger.info("Zama News Bot initialized")
     
+    def _is_too_old(self, date_obj, days: int = 30) -> bool:
+        """
+        Check if an item is too old (for filtering on first run)
+        
+        Args:
+            date_obj: datetime object of the item
+            days: Number of days threshold (default 30)
+            
+        Returns:
+            True if item is older than threshold
+        """
+        if not date_obj:
+            return False
+        
+        from datetime import timedelta
+        threshold = datetime.now() - timedelta(days=days)
+        
+        # Only filter old items if storage is mostly empty (first run)
+        total_items = (
+            self.storage.get_posted_count('blog') +
+            self.storage.get_posted_count('github') +
+            self.storage.get_posted_count('github_pr')
+        )
+        
+        # If we have less than 5 tracked items, we're on first run
+        if total_items < 5:
+            return date_obj < threshold
+        
+        return False
+    
     async def send_message(self, message: str) -> bool:
         """
         Send a message to the Telegram channel
@@ -113,6 +143,11 @@ class ZamaNewsBot:
             for post in posts:
                 post_id = post['id']
                 if not self.storage.is_posted('blog', post_id):
+                    # Skip old items on first run (older than 30 days)
+                    if self._is_too_old(post.get('date_obj')):
+                        self.storage.mark_posted('blog', post_id)  # Mark as posted but don't send
+                        continue
+                    
                     message = format_blog_post(post)
                     if await self.send_message(message):
                         self.storage.mark_posted('blog', post_id)
@@ -135,6 +170,11 @@ class ZamaNewsBot:
             for release in releases:
                 release_id = release['id']
                 if not self.storage.is_posted('github', release_id):
+                    # Skip old items on first run (older than 30 days)
+                    if self._is_too_old(release.get('date_obj')):
+                        self.storage.mark_posted('github', release_id)  # Mark as posted but don't send
+                        continue
+                    
                     message = format_github_release(release)
                     if await self.send_message(message):
                         self.storage.mark_posted('github', release_id)
@@ -157,6 +197,11 @@ class ZamaNewsBot:
             for pr in prs:
                 pr_id = pr['id']
                 if not self.storage.is_posted('github_pr', pr_id):
+                    # Skip old items on first run (older than 7 days for PRs)
+                    if self._is_too_old(pr.get('date_obj'), days=7):
+                        self.storage.mark_posted('github_pr', pr_id)  # Mark as posted but don't send
+                        continue
+                    
                     message = format_pr(pr)
                     if await self.send_message(message):
                         self.storage.mark_posted('github_pr', pr_id)
