@@ -116,33 +116,25 @@ def format_changelog(entry: Dict[str, Any]) -> str:
     message += f"<b>{title}</b>\n\n"
     
     if content:
-        # Split content into paragraphs and format nicely
-        paragraphs = content.split('\n')
-        formatted_content = []
+        # Content is already formatted with proper structure from docs_monitor
+        # Just need to escape HTML in non-HTML parts
+        lines = content.split('\n')
+        formatted_lines = []
         
-        for para in paragraphs:
-            para = para.strip()
-            if not para:
+        for line in lines:
+            line = line.strip()
+            if not line:
                 continue
             
-            # Escape HTML
-            para = escape_html(para)
-            
-            # Check if it's a list item
-            if para.startswith('•'):
-                formatted_content.append(para)
+            # Don't escape if it contains HTML tags (subheadings)
+            if '<b>' in line or '</b>' in line:
+                formatted_lines.append(line)
             else:
-                # Regular paragraph - limit length
-                if len(para) > 300:
-                    para = para[:300] + '...'
-                formatted_content.append(para)
-            
-            # Limit total items
-            if len(formatted_content) >= 5:
-                break
+                # Escape HTML for regular content
+                formatted_lines.append(escape_html(line))
         
-        # Join with double newlines for readability
-        message += '\n\n'.join(formatted_content)
+        # Join with single newlines (content already has structure)
+        message += '\n'.join(formatted_lines)
         message += '\n\n'
     
     if date:

@@ -30,7 +30,7 @@ class DocsMonitor:
     
     def get_changelog_updates(self) -> List[Dict[str, Any]]:
         """
-        Check for changelog updates with better parsing
+        Check for changelog updates with proper structure parsing
         
         Returns:
             List of changelog entries
@@ -42,65 +42,73 @@ class DocsMonitor:
             soup = BeautifulSoup(response.content, 'html.parser')
             entries = []
             
-            # Look for changelog sections - typically h2 headings with date/version
-            sections = soup.find_all(['h2', 'h3', 'section', 'article'])
+            # Find main content area
+            main = soup.find('main') or soup.find('article') or soup.find('div', class_='content')
+            if not main:
+                return []
             
-            for section in sections:
-                # Extract heading text
-                heading = section.get_text(strip=True)
+            # Look for h2 headings (main sections in changelog)
+            headings = main.find_all('h2')
+            
+            for heading in headings:
+                heading_text = heading.get_text(strip=True)
                 
                 # Skip navigation, TOC, etc.
-                skip_keywords = ['Table of Contents', 'Navigation', 'Search', 'Menu', 'Sidebar']
-                if any(keyword in heading for keyword in skip_keywords) or len(heading) < 5:
+                skip_keywords = ['Table of Contents', 'Navigation', 'Search', 'Menu', 'Sidebar', 'Change']
+                if any(keyword in heading_text for keyword in skip_keywords) or len(heading_text) < 3:
                     continue
                 
-                # Try to find associated content
+                # Collect content until next h2
                 content_parts = []
+                current = heading.find_next_sibling()
                 
-                # Get next siblings until next heading
-                next_elem = section.find_next_sibling()
-                while next_elem and next_elem.name not in ['h1', 'h2', 'h3']:
-                    if next_elem.name == 'p':
-                        text = next_elem.get_text(strip=True)
-                        if text:
-                            content_parts.append(text)
-                    elif next_elem.name in ['ul', 'ol']:
-                        # Handle lists with bullet points
-                        items = next_elem.find_all('li')
-                        for item in items[:5]:  # Max 5 list items
-                            text = item.get_text(strip=True)
-                            if text:
-                                content_parts.append(f"• {text}")
-                    elif next_elem.name == 'div':
-                        text = next_elem.get_text(strip=True)
-                        if text and len(text) > 20:  # Only substantial divs
-                            content_parts.append(text)
-                    next_elem = next_elem.find_next_sibling()
-                    if len(content_parts) >= 6:  # Limit total elements
+                while current and current.name != 'h2':
+                    # Handle paragraphs
+                    if current.name == 'p':
+                        text = current.get_text(strip=True)
+                        if text and len(text) > 10:  # Skip very short paragraphs
+                            content_parts.append(('p', text))
+                    
+                    # Handle lists
+                    elif current.name in ['ul', 'ol']:
+                        list_items = []
+                        for li in current.find_all('li', recursive=False):
+                            li_text = li.get_text(strip=True)
+                            if li_text:
+                                list_items.append(li_text)
+                        if list_items:
+                            content_parts.append(('list', list_items[:8]))  # Max 8 items
+                    
+                    # Handle h3 subheadings
+                    elif current.name == 'h3':
+                        subheading = current.get_text(strip=True)
+                        if subheading:
+                            content_parts.append(('h3', subheading))
+                    
+                    current = current.find_next_sibling()
+                    
+                    # Limit content
+                    if len(content_parts) >= 8:
                         break
                 
-                full_content = '\n'.join(content_parts)
+                if not content_parts:
+                    continue
                 
-                # Extract date if present in heading
+                # Format content with proper structure
+                formatted_content = self._format_changelog_content(content_parts)
+                
+                # Extract date
                 import re
-                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', heading)
+                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', heading_text)
                 date_str = date_match.group(1) if date_match else datetime.now().strftime('%Y-%m-%d')
                 
-                # Create better title
-                title = heading
-                # If heading is just a date, try to get more context
-                if re.match(r'^\d{4}-\d{2}-\d{2}$', heading.strip()):
-                    if content_parts:
-                        first_line = content_parts[0].split('\n')[0]
-                        title = f"{heading}: {first_line[:60]}"
-                
-                # Create unique ID from title + date
-                content_hash = hashlib.md5(f"{title}{date_str}".encode()).hexdigest()
+                # Create entry
+                content_hash = hashlib.md5(f"{heading_text}{date_str}".encode()).hexdigest()
                 
                 entry = {
                     'id': f"changelog:{content_hash}",
-                    'title': title[:150],
-                    'content': full_content[:600] if full_content else heading,
+                    'title': heading_text[:150],
+                    'content': formatted_content,
                     'url': self.changelog_url,
                     'date': date_str,
                     'date_obj': self._parse_changelog_date(date_str),
@@ -114,6 +122,24 @@ class DocsMonitor:
         except Exception as e:
             logger.error(f"Error fetching changelog: {e}")
             return []
+    
+    def _format_changelog_content(self, content_parts: List) -> str:
+        """Format changelog content with proper structure"""
+        formatted = []
+        
+        for content_type, content in content_parts:
+            if content_type == 'p':
+                # Regular paragraph
+                formatted.append(content[:250])  # Limit length
+            elif content_type == 'h3':
+                # Subheading
+                formatted.append(f"<b>{content}</b>")
+            elif content_type == 'list':
+                # List items
+                for item in content:
+                    formatted.append(f"• {item[:200]}")
+        
+        return '\n'.join(formatted[:600])  # Join with single newlines
     
     def _parse_changelog_date(self, date_str: str) -> datetime:
         """Parse changelog date string"""
