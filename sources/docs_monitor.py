@@ -60,12 +60,23 @@ class DocsMonitor:
                 # Get next siblings until next heading
                 next_elem = section.find_next_sibling()
                 while next_elem and next_elem.name not in ['h1', 'h2', 'h3']:
-                    if next_elem.name in ['p', 'ul', 'ol', 'div']:
+                    if next_elem.name == 'p':
                         text = next_elem.get_text(strip=True)
                         if text:
                             content_parts.append(text)
+                    elif next_elem.name in ['ul', 'ol']:
+                        # Handle lists with bullet points
+                        items = next_elem.find_all('li')
+                        for item in items[:5]:  # Max 5 list items
+                            text = item.get_text(strip=True)
+                            if text:
+                                content_parts.append(f"• {text}")
+                    elif next_elem.name == 'div':
+                        text = next_elem.get_text(strip=True)
+                        if text and len(text) > 20:  # Only substantial divs
+                            content_parts.append(text)
                     next_elem = next_elem.find_next_sibling()
-                    if len(content_parts) >= 3:  # Limit to first 3 paragraphs
+                    if len(content_parts) >= 6:  # Limit total elements
                         break
                 
                 full_content = '\n'.join(content_parts)

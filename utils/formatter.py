@@ -108,7 +108,7 @@ def format_pr(pr: Dict[str, Any]) -> str:
 def format_changelog(entry: Dict[str, Any]) -> str:
     """Format a changelog entry for Telegram (HTML format)"""
     title = escape_html(entry.get('title', 'Changelog Update'))
-    content = escape_html(entry.get('content', '')[:400])
+    content = entry.get('content', '')
     url = entry.get('url', '')
     date = entry.get('date', '')
     
@@ -116,12 +116,39 @@ def format_changelog(entry: Dict[str, Any]) -> str:
     message += f"<b>{title}</b>\n\n"
     
     if content:
-        message += f"{content}...\n\n"
+        # Split content into paragraphs and format nicely
+        paragraphs = content.split('\n')
+        formatted_content = []
+        
+        for para in paragraphs:
+            para = para.strip()
+            if not para:
+                continue
+            
+            # Escape HTML
+            para = escape_html(para)
+            
+            # Check if it's a list item
+            if para.startswith('•'):
+                formatted_content.append(para)
+            else:
+                # Regular paragraph - limit length
+                if len(para) > 300:
+                    para = para[:300] + '...'
+                formatted_content.append(para)
+            
+            # Limit total items
+            if len(formatted_content) >= 5:
+                break
+        
+        # Join with double newlines for readability
+        message += '\n\n'.join(formatted_content)
+        message += '\n\n'
     
     if date:
         message += f"📅 {date}\n"
     
-    message += f"🔗 <a href='{url}'>View Changelog</a>"
+    message += f"🔗 <a href='{url}'>View Full Changelog</a>"
     
     return message
 
