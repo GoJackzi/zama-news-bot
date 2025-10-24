@@ -122,7 +122,7 @@ class ZamaNewsBot:
                 chat_id=self.channel_id,
                 text=message,
                 parse_mode='HTML',
-                disable_web_page_preview=False
+                disable_web_page_preview=True  # Disable link previews to keep messages compact
             )
             logger.info("Message sent successfully")
             return True
@@ -140,7 +140,8 @@ class ZamaNewsBot:
             posts = self.blog_monitor.get_latest_posts(max_posts=5)
             new_posts = 0
             
-            for post in posts:
+            # Reverse to post oldest first, newest last
+            for post in reversed(posts):
                 post_id = post['id']
                 if not self.storage.is_posted('blog', post_id):
                     # Skip old items on first run (older than 30 days)
@@ -167,7 +168,8 @@ class ZamaNewsBot:
             releases = self.github_monitor.get_latest_releases()
             new_releases = 0
             
-            for release in releases:
+            # Reverse to post oldest first, newest last
+            for release in reversed(releases):
                 release_id = release['id']
                 if not self.storage.is_posted('github', release_id):
                     # Skip old items on first run (older than 30 days)
@@ -194,7 +196,8 @@ class ZamaNewsBot:
             prs = self.github_monitor.get_merged_prs(per_repo=3)
             new_prs = 0
             
-            for pr in prs:
+            # Reverse to post oldest first, newest last
+            for pr in reversed(prs):
                 pr_id = pr['id']
                 if not self.storage.is_posted('github_pr', pr_id):
                     # Skip old items on first run (older than 7 days for PRs)
@@ -222,7 +225,8 @@ class ZamaNewsBot:
             changelog_entries = self.docs_monitor.get_changelog_updates()
             new_changelog = 0
             
-            for entry in changelog_entries:
+            # Reverse to post oldest first, newest last
+            for entry in reversed(changelog_entries):
                 entry_id = entry['id']
                 if not self.storage.is_posted('changelog', entry_id):
                     message = format_changelog(entry)
@@ -231,16 +235,26 @@ class ZamaNewsBot:
                         new_changelog += 1
                         await asyncio.sleep(2)
             
-            # Check litepaper
+            # Check litepaper (with change detection)
             litepaper_entries = self.docs_monitor.get_litepaper_updates()
             new_litepaper = 0
             
             for entry in litepaper_entries:
                 entry_id = entry['id']
                 if not self.storage.is_posted('litepaper', entry_id):
+                    # Get previous version for comparison
+                    previous_hash = self.storage.get_last_litepaper_hash()
+                    current_hash = entry.get('hash', '')
+                    
+                    # Add change info to entry
+                    if previous_hash and previous_hash != current_hash:
+                        entry['has_changes'] = True
+                        entry['previous_hash'] = previous_hash
+                    
                     message = format_litepaper(entry)
                     if await self.send_message(message):
                         self.storage.mark_posted('litepaper', entry_id)
+                        self.storage.save_litepaper_hash(current_hash)
                         new_litepaper += 1
                         await asyncio.sleep(2)
             
@@ -256,7 +270,8 @@ class ZamaNewsBot:
             updates = self.status_monitor.get_status_updates(max_items=5)
             new_status = 0
             
-            for update in updates:
+            # Reverse to post oldest first, newest last
+            for update in reversed(updates):
                 update_id = update['id']
                 if not self.storage.is_posted('status', update_id):
                     message = format_status(update)

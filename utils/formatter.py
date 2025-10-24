@@ -131,10 +131,16 @@ def format_litepaper(entry: Dict[str, Any]) -> str:
     title = escape_html(entry.get('title', 'Litepaper Update'))
     url = entry.get('url', '')
     date = entry.get('date', '')
+    has_changes = entry.get('has_changes', False)
     
     message = f"📄 <b>Litepaper Updated</b>\n\n"
     message += f"<b>{title}</b>\n\n"
-    message += f"The Zama Protocol Litepaper has been updated with new information.\n\n"
+    
+    if has_changes:
+        message += f"✏️ The Zama Protocol Litepaper has been modified.\n"
+        message += f"Previous version detected - content has changed.\n\n"
+    else:
+        message += f"📝 New version of the Zama Protocol Litepaper is available.\n\n"
     
     if date:
         message += f"📅 {date}\n"

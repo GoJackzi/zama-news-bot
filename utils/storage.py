@@ -34,7 +34,8 @@ class Storage:
             'blog': [],
             'github': [],
             'twitter': [],
-            'last_updated': None
+            'last_updated': None,
+            'litepaper_hash': None
         }
     
     def _save(self):
@@ -72,4 +73,14 @@ class Storage:
             self.data[source] = self.data[source][-keep_last:]
             self._save()
             logger.info(f"Cleaned up {source}, keeping last {keep_last} items")
+    
+    def get_last_litepaper_hash(self) -> str:
+        """Get the hash of the last litepaper version"""
+        return self.data.get('litepaper_hash', None)
+    
+    def save_litepaper_hash(self, hash_value: str):
+        """Save the current litepaper hash"""
+        self.data['litepaper_hash'] = hash_value
+        self._save()
+        logger.info(f"Saved litepaper hash: {hash_value[:16]}...")
 
