@@ -65,3 +65,4 @@ Click "Logs" tab to see your bot activity in real-time.
 
 **Done!** Your bot now runs 24/7 without your PC being on! 🚀
 
+

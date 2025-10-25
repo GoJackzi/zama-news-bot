@@ -21,6 +21,7 @@ from utils.formatter import (
     format_startup_message,
     format_error_message
 )
+from utils.diff_detector import detect_changelog_changes, format_changelog_changes
 from sources.zama_blog import ZamaBlogMonitor
 from sources.github_monitor import GitHubMonitor
 from sources.docs_monitor import DocsMonitor
@@ -221,17 +222,40 @@ class ZamaNewsBot:
         """Check for documentation updates"""
         logger.info("Checking documentation updates...")
         try:
-            # Check changelog
+            # Check changelog with change detection
             changelog_entries = self.docs_monitor.get_changelog_updates()
             new_changelog = 0
             
             # Reverse to post oldest first, newest last
             for entry in reversed(changelog_entries):
                 entry_id = entry['id']
-                if not self.storage.is_posted('changelog', entry_id):
+                current_content = entry.get('content', '')
+                
+                # Check if this is an update to existing entry
+                previous_content = self.storage.get_last_changelog_content(entry_id)
+                
+                if previous_content:
+                    # Entry exists - check for changes
+                    changes = detect_changelog_changes(current_content, previous_content)
+                    
+                    if changes.get('has_changes'):
+                        # Content was updated - post the changes
+                        entry['changes'] = changes
+                        entry['is_update'] = True
+                        message = format_changelog(entry)
+                        
+                        if await self.send_message(message):
+                            self.storage.save_changelog_content(entry_id, current_content)
+                            new_changelog += 1
+                            await asyncio.sleep(2)
+                elif not self.storage.is_posted('changelog', entry_id):
+                    # New entry
+                    entry['is_update'] = False
                     message = format_changelog(entry)
+                    
                     if await self.send_message(message):
                         self.storage.mark_posted('changelog', entry_id)
+                        self.storage.save_changelog_content(entry_id, current_content)
                         new_changelog += 1
                         await asyncio.sleep(2)
             

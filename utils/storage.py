@@ -95,4 +95,18 @@ class Storage:
         self.data['litepaper_sections'] = json.dumps(sections)
         self._save()
         logger.info(f"Saved litepaper sections: {len(sections)} sections")
+    
+    def get_last_changelog_content(self, entry_id: str) -> str:
+        """Get the previous content of a changelog entry"""
+        if 'changelog_content' not in self.data:
+            self.data['changelog_content'] = {}
+        return self.data['changelog_content'].get(entry_id, None)
+    
+    def save_changelog_content(self, entry_id: str, content: str):
+        """Save changelog content for future comparison"""
+        if 'changelog_content' not in self.data:
+            self.data['changelog_content'] = {}
+        self.data['changelog_content'][entry_id] = content
+        self._save()
+        logger.info(f"Saved changelog content for {entry_id}")
 

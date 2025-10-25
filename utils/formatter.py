@@ -111,31 +111,47 @@ def format_changelog(entry: Dict[str, Any]) -> str:
     content = entry.get('content', '')
     url = entry.get('url', '')
     date = entry.get('date', '')
+    is_update = entry.get('is_update', False)
+    changes = entry.get('changes', {})
     
-    message = f"📋 <b>Documentation Changelog</b>\n\n"
-    message += f"<b>{title}</b>\n\n"
+    # Header depends on whether it's new or updated
+    if is_update:
+        message = f"📋 <b>Documentation Updated</b>\n\n"
+        message += f"<b>🔄 {title}</b>\n"
+    else:
+        message = f"📋 <b>Documentation Changelog</b>\n\n"
+        message += f"<b>{title}</b>\n"
     
-    if content:
-        # Content is already formatted with proper structure from docs_monitor
-        # Just need to escape HTML in non-HTML parts
-        lines = content.split('\n')
-        formatted_lines = []
-        
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
+    # Show changes if this is an update
+    if is_update and changes:
+        from utils.diff_detector import format_changelog_changes
+        message += format_changelog_changes(changes)
+        message += "\n"
+    else:
+        # Show current content for new entries
+        message += "\n"
+        if content:
+            # Content is already formatted with proper structure from docs_monitor
+            lines = content.split('\n')
+            formatted_lines = []
             
-            # Don't escape if it contains HTML tags (subheadings)
-            if '<b>' in line or '</b>' in line:
-                formatted_lines.append(line)
-            else:
-                # Escape HTML for regular content
-                formatted_lines.append(escape_html(line))
-        
-        # Join with single newlines (content already has structure)
-        message += '\n'.join(formatted_lines)
-        message += '\n\n'
+            for line in lines[:15]:  # Limit to first 15 lines for new entries
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Don't escape if it contains HTML tags (subheadings)
+                if '<b>' in line or '</b>' in line:
+                    formatted_lines.append(line)
+                else:
+                    # Escape HTML for regular content
+                    formatted_lines.append(escape_html(line))
+            
+            # Join with single newlines
+            message += '\n'.join(formatted_lines)
+            if len(content.split('\n')) > 15:
+                message += '\n<i>...see full changelog for more</i>'
+            message += '\n\n'
     
     if date:
         message += f"📅 {date}\n"

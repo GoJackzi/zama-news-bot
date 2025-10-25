@@ -102,13 +102,15 @@ class DocsMonitor:
                 date_match = re.search(r'(\d{4}-\d{2}-\d{2})', heading_text)
                 date_str = date_match.group(1) if date_match else datetime.now().strftime('%Y-%m-%d')
                 
-                # Create entry
-                content_hash = hashlib.md5(f"{heading_text}{date_str}".encode()).hexdigest()
+                # Create stable ID based on heading only (not content)
+                heading_hash = hashlib.md5(heading_text.encode()).hexdigest()
+                entry_id = f"changelog:{heading_hash}"
                 
                 entry = {
-                    'id': f"changelog:{content_hash}",
+                    'id': entry_id,
                     'title': heading_text[:150],
                     'content': formatted_content,
+                    'content_parts': content_parts,  # Store structured content for diff
                     'url': self.changelog_url,
                     'date': date_str,
                     'date_obj': self._parse_changelog_date(date_str),
